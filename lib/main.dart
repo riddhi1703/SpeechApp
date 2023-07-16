@@ -7,13 +7,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: FirebaseOptions(
-        apiKey: "AIzaSyDId0NVMhFFrP9HLELwfDFmgPxnpI7e2-M",
-        authDomain: "speechapp-a378f.firebaseapp.com",
-        projectId: "speechapp-a378f",
-        storageBucket: "speechapp-a378f.appspot.com",
-        messagingSenderId: "637028296510",
-        appId: "1:637028296510:web:1cf398df9503e86497ae6f",
-        measurementId: "G-79NTES2Y46"
+            apiKey: "AIzaSyDId0NVMhFFrP9HLELwfDFmgPxnpI7e2-M",
+      authDomain: "speechapp-a378f.firebaseapp.com",
+      projectId: "speechapp-a378f",
+      storageBucket: "speechapp-a378f.appspot.com",
+      messagingSenderId: "637028296510",
+      appId: "1:637028296510:web:1cf398df9503e86497ae6f",
+      measurementId: "G-79NTES2Y46"
     ),
   );
   runApp(MyApp());
@@ -75,14 +75,33 @@ class ReadingTile extends StatelessWidget {
   }
 }
 
-class ShortStoryOptionsPage extends StatelessWidget {
+class ShortStoryOptionsPage extends StatefulWidget {
+  @override
+  _ShortStoryOptionsPageState createState() => _ShortStoryOptionsPageState();
+}
+
+class _ShortStoryOptionsPageState extends State<ShortStoryOptionsPage> {
+  bool isPlaying = false;
+  QueryDocumentSnapshot? selectedStory; // Store the selected story here
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Short Story Options'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: () {
+              setState(() {
+                isPlaying = false;
+                selectedStory = null; // Reset the selected story when refreshed
+              });
+            },
+          ),
+        ],
       ),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
+      body: FutureBuilder<QuerySnapshot>(
         future: fetchShortStories(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -90,24 +109,32 @@ class ShortStoryOptionsPage extends StatelessWidget {
               child: CircularProgressIndicator(),
             );
           }
-          if (snapshot.hasError) {
+          if (snapshot.hasError || snapshot.data == null) {
             return Center(
               child: Text('Error fetching short stories'),
             );
           }
-          final List<Map<String, dynamic>> shortStories = snapshot.data ?? [];
+          final List<QueryDocumentSnapshot> shortStories =
+              snapshot.data!.docs; // Access the documents list from QuerySnapshot
           return ListView.builder(
             itemCount: shortStories.length,
             itemBuilder: (context, index) {
               final shortStory = shortStories[index];
+              final data = shortStory.data() as Map<String, dynamic>?; // Cast to the correct type
+              final title = data?['Title'] ?? 'Unknown Title';
+              final author = data?['author'] ?? 'Unknown Author';
               return ListTile(
-                title: Text(shortStory['Title'] ?? ''),
-                subtitle: Text(shortStory['author'] ?? ''),
+                title: Text(title),
+                subtitle: Text(author),
                 onTap: () {
+                  setState(() {
+                    selectedStory = shortStory; // Update the selected story
+                    isPlaying = false; // Stop any ongoing reading when a new story is selected
+                  });
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => ArticlePage(shortStory: shortStory),
+                      builder: (context) => ArticlePage(selectedStory: selectedStory!),
                     ),
                   );
                 },
@@ -119,136 +146,71 @@ class ShortStoryOptionsPage extends StatelessWidget {
     );
   }
 
-  Future<List<Map<String, dynamic>>> fetchShortStories() async {
-    final QuerySnapshot snapshot = await FirebaseFirestore.instance
-        .collection('short story')
-        .get();
-
-    final List<QueryDocumentSnapshot> documents = snapshot.docs;
-    final List<Map<String, dynamic>> shortStories = [];
-    for (final doc in documents) {
-      shortStories.add(doc.data() as Map<String, dynamic>);
-    }
-
-    return shortStories;
+  Future<QuerySnapshot> fetchShortStories() async {
+    return FirebaseFirestore.instance.collection('short story').get();
   }
 }
 
 class ArticlePage extends StatefulWidget {
-  final Map<String, dynamic>? shortStory;
+  final QueryDocumentSnapshot selectedStory;
 
-  ArticlePage({required this.shortStory});
+  ArticlePage({required this.selectedStory});
 
   @override
-  ArticlePageState createState() => ArticlePageState();
+  _ArticlePageState createState() => _ArticlePageState();
 }
 
-class ArticlePageState extends State<ArticlePage> {
+class _ArticlePageState extends State<ArticlePage> {
   FlutterTts flutterTts = FlutterTts();
-  String? articleText;
-  bool isPlaying = false;
-  double selectedSpeechRate = 1.0;
-  String selectedVoiceGender = "male";
-  List<double> speedOptions = [0.5, 1.0, 1.5, 2.0];
+  String articleText = '';
+  bool isPlayingState = false;
 
   @override
   void initState() {
     super.initState();
-    articleText = widget.shortStory?['Description'];
-    initTts();
+    _loadStory();
   }
 
-  // Future<void> updateTtsSettings() async {
-  //   await flutterTts.setSpeechRate(selectedSpeed);
-  //   await flutterTts.setVoice({
-  //     'name': selectedVoiceGender == "male"
-  //         ? "en-IN-x-ism#male_2-local"
-  //         : "en-IN-x-ism#female_1-local",
-  //   });
-  // }
-
-  // Future<void> initTts() async {
-  //   //await (flutterTts.getDefaultVoice);
-  //   await flutterTts.setLanguage("en-US");
-  //   await updateTtsSettings();
-  //   await flutterTts.setSpeechRate(selectedSpeed);
-  //   await flutterTts.setVoice({
-  //     'name': selectedVoiceGender == "male"
-  //         ? "en-IN-x-ism#male_2-local"
-  //         : "en-IN-x-ism#female_1-local",
-  //   });
-  //   flutterTts.setStartHandler(() {
-  //     setState(() {
-  //       isPlaying = true;
-  //     });
-  //   });
-  //   flutterTts.setCompletionHandler(() {
-  //     setState(() {
-  //       isPlaying = false;
-  //     });
-  //   });
-  // }
-  Future<void> initTts() async {
-    await flutterTts.setLanguage("en-US");
-    await flutterTts.setVoice({
-      'name': selectedVoiceGender == "male"
-          ? "en-IN-x-ism#male_2-local"
-          : "en-IN-x-ism#female_1-local",
+  void _loadStory() {
+    final data = widget.selectedStory.data() as Map<String, dynamic>;
+    setState(() {
+      articleText = data['Description'] ?? '';
     });
-    flutterTts.setStartHandler(() {
-      setState(() {
-        isPlaying = true;
-      });
-    });
-    flutterTts.setCompletionHandler(() {
-      setState(() {
-        isPlaying = false;
-      });
-    });
-    await flutterTts.setSpeechRate(selectedSpeechRate);
   }
 
-  // Future<void> speakArticle() async {
-  //   if (articleText != null && articleText!.isNotEmpty) {
-  //     if (!isPlaying) {
-  //       await flutterTts.stop(); // Stop any ongoing reading
-  //       await flutterTts.speak(articleText!);
-  //       setState(() {
-  //         isPlaying = true;
-  //       });
-  //     } else {
-  //       await flutterTts.stop();
-  //       setState(() {
-  //         isPlaying = false;
-  //       });
-  //     }
-  //   }
-  // }
-  Future<void> speakArticle() async {
-    if (articleText != null && articleText!.isNotEmpty) {
-      if (!isPlaying) {
-        await flutterTts.stop(); // Stop any ongoing reading
-        await flutterTts.setSpeechRate(selectedSpeechRate);
-        await flutterTts.setVoice({
-          'name': selectedVoiceGender == "male"
-              ? "en-IN-x-ism#male_2-local"
-              : "en-IN-x-ism#female_1-local",
-        });
-        await flutterTts.speak(articleText!);
-        setState(() {
-          isPlaying = true;
-        });
-      } else {
-        await flutterTts.stop();
-        setState(() {
-          isPlaying = false;
-        });
-      }
+  Future<void> _speak() async {
+    await flutterTts.stop();
+    await flutterTts.speak(articleText);
+    setState(() {
+      isPlayingState = true;
+    });
+  }
+
+  Future<void> _stop() async {
+    await flutterTts.stop();
+    setState(() {
+      isPlayingState = false;
+    });
+  }
+
+  void _toggleReading() {
+    if (isPlayingState) {
+      _stop();
+    } else {
+      _speak();
     }
   }
 
-  void toggleReading() {
-    speakArticle();
+  @override
+  void didUpdateWidget(ArticlePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.selectedStory != oldWidget.selectedStory) {
+      _stop();
+      setState(() {
+        isPlayingState = false;
+      });
+      _loadStory();
+    }
   }
 
   @override
@@ -259,9 +221,8 @@ class ArticlePageState extends State<ArticlePage> {
 
   @override
   Widget build(BuildContext context) {
-    final String title = widget.shortStory?['Title'] ?? '';
-    final String author = widget.shortStory?['author'] ?? '';
-    final String description = widget.shortStory?['Description'] ?? '';
+    final String title = widget.selectedStory['Title'] ?? '';
+    final String author = widget.selectedStory['author'] ?? '';
 
     return Scaffold(
       appBar: AppBar(
@@ -273,18 +234,18 @@ class ArticlePageState extends State<ArticlePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Author: ${author ?? ''}',
+              'Author: $author',
               style: TextStyle(fontSize: 18.0),
             ),
             Text(
-              'Title: ${title ?? ''}',
+              'Title: $title',
               style: TextStyle(fontSize: 18.0),
             ),
             SizedBox(height: 16.0),
             Expanded(
               child: SingleChildScrollView(
                 child: Text(
-                  description ?? '',
+                  articleText,
                   style: TextStyle(fontSize: 16.0),
                 ),
               ),
@@ -292,59 +253,9 @@ class ArticlePageState extends State<ArticlePage> {
             SizedBox(height: 16.0),
             Center(
               child: ElevatedButton(
-                onPressed: toggleReading,
-                child: Text(isPlaying ? 'Stop' : 'Read Aloud'),
+                onPressed: _toggleReading,
+                child: Text(isPlayingState ? 'Stop' : 'Read Aloud'),
               ),
-            ),
-            SizedBox(height: 16.0),
-            Text('Speed:'),
-            // DropdownButton<double>(
-            //   value: selectedSpeed,
-            //   onChanged: (newValue) {
-            //     setState(() {
-            //       selectedSpeed = newValue!;
-            //       //updateTtsSettings();
-            //       flutterTts.setSpeechRate(selectedSpeed);
-            //     });
-            //   },
-            //   items: speedOptions.map((speed) {
-            //     return DropdownMenuItem<double>(
-            //       value: speed,
-            //       child: Text(speed.toStringAsFixed(1) + 'x'),
-            //     );
-            //   }).toList(),
-            // ),
-            Slider(
-              value: selectedSpeechRate,
-              min: 0.5,
-              max: 2.0,
-              onChanged: (newValue) {
-                setState(() {
-                  selectedSpeechRate = newValue;
-                  flutterTts.setSpeechRate(selectedSpeechRate);
-                });
-              },
-            ),
-            Text('Voice Gender:'),
-            DropdownButton<String>(
-              value: selectedVoiceGender,
-              onChanged: (newValue) {
-                setState(() {
-                  selectedVoiceGender = newValue!;
-                  //updateTtsSettings();
-                  initTts();
-                });
-              },
-              items: [
-                DropdownMenuItem<String>(
-                  value: "male",
-                  child: Text('Male'),
-                ),
-                DropdownMenuItem<String>(
-                  value: "female",
-                  child: Text('Female'),
-                ),
-              ],
             ),
           ],
         ),
@@ -352,6 +263,7 @@ class ArticlePageState extends State<ArticlePage> {
     );
   }
 }
+
 
 // apiKey: "AIzaSyDId0NVMhFFrP9HLELwfDFmgPxnpI7e2-M",
 // authDomain: "speechapp-a378f.firebaseapp.com",
